@@ -1,51 +1,37 @@
-# api/index.py for Vercel deployment
-import os
-import sys
-from pathlib import Path
+# api/index.py
+# Vercel Serverless Function for Todo API
 
-# Add the src directory to the path
-src_path = Path(__file__).parent.parent / "src"
-sys.path.insert(0, str(src_path))
-
-from fastapi import FastAPI
+import json
+from typing import Dict, Any
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from mangum import Mangum
+import os
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
-app = FastAPI(title="Todo API", version="0.1.0")
+# Import your main FastAPI app
+from src.main import app as fastapi_app
 
-# Add CORS middleware
-app.add_middleware(
+# Add CORS middleware for Vercel deployment
+fastapi_app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # In production, replace with specific origins
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.get("/")
-def read_root():
-    return {"message": "Welcome to the Todo API"}
+# Create the Mangum adapter for ASGI to serverless compatibility
+handler = Mangum(fastapi_app)
 
-@app.get("/health")
-def health_check():
-    return {"status": "healthy"}
+# For Vercel serverless functions
+def main(event, context):
+    return handler(event, context)
 
-# Import and include API routes if they exist
-try:
-    from api import auth, todos
-    app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
-    app.include_router(todos.router, prefix="/api/todos", tags=["todos"])
-except ImportError as e:
-    print(f"Could not import API routes: {e}")
-
-# For Vercel deployment
-def main():
-    return app
-
-# For local development
+# If running locally for testing
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
+    uvicorn.run(fastapi_app, host="0.0.0.0", port=8000)
